@@ -1,0 +1,8 @@
+module DesignTokens
+
+ValuesTheme 1.0 ValuesTheme.qml
+ValuesStrings 1.0 ValuesStrings.qml
+singleton Values 1.0 Values.qml
+TokensTheme 1.0 TokensTheme.qml
+TokensColors 1.0 TokensColors.qml
+singleton Tokens 1.0 Tokens.qml
