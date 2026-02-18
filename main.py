@@ -2,32 +2,43 @@ from machine import Pin
 import json
 import time
 
-# Rotary encoder on GP0 (CLK) and GP1 (DT)
-clk = Pin(0, Pin.IN, Pin.PULL_UP)
-dt = Pin(1, Pin.IN, Pin.PULL_UP)
+# Rotary encoder on GP12 (CLK) and GP13 (DT)
+clk = Pin(12, Pin.IN, Pin.PULL_UP)
+dt = Pin(13, Pin.IN, Pin.PULL_UP)
 
-# Button 1 (GP15) = eco theme, Button 4 (GP13) = sport theme
-button_eco = Pin(15, Pin.IN, Pin.PULL_UP)
-button_sport = Pin(13, Pin.IN, Pin.PULL_UP)
-
-# LEDs on GP14 and GP10
-led = Pin(14, Pin.OUT)
-ledTwo = Pin(10, Pin.OUT)
+# Knob press on GP14 (signal) and GP15 (ground reference)
+button_press = Pin(14, Pin.IN, Pin.PULL_UP)
+button_gnd = Pin(15, Pin.OUT, value=0)
 
 speed = 0
 prev_clk = clk.value()
-prev_eco = 1
-prev_sport = 1
+prev_press = 1
 last_sent = {}
+last_knob_time = time.ticks_ms()
+KNOB_DEBOUNCE_MS = 5
+step_count = 0
+STEPS_PER_CHANGE = 2
+
+# Mode cycling: each press advances to the next mode
+modes = ["sport", "eco"]
+mode_index = 0
 
 while True:
-    # Rotary encoder: adjust speed 0-160
+    # Rotary encoder: adjust speed 0-160 (every 2 steps)
     val_clk = clk.value()
-    if val_clk != prev_clk:
+    now = time.ticks_ms()
+    if val_clk != prev_clk and time.ticks_diff(now, last_knob_time) > KNOB_DEBOUNCE_MS:
         if dt.value() != val_clk:
-            speed = max(0, speed - 1)
+            step_count += 1
+            if step_count >= STEPS_PER_CHANGE:
+                speed = min(160, speed + 1)
+                step_count = 0
         else:
-            speed = min(160, speed + 1)
+            step_count -= 1
+            if step_count <= -STEPS_PER_CHANGE:
+                speed = max(0, speed - 1)
+                step_count = 0
+        last_knob_time = now
     prev_clk = val_clk
 
     # Gear based on speed
@@ -48,21 +59,13 @@ while True:
 
     state = {"mphValue": str(speed), "gear": gear}
 
-    # Eco button: switch theme on release
-    val = button_eco.value()
-    if prev_eco == 0 and val == 1:
-        state["theme"] = "eco"
-        led.on()
-        ledTwo.off()
-    prev_eco = val
-
-    # Sport button: switch theme on release
-    val = button_sport.value()
-    if prev_sport == 0 and val == 1:
-        state["theme"] = "sport"
-        led.off()
-        ledTwo.on()
-    prev_sport = val
+    # Knob press: cycle mode on release
+    val = button_press.value()
+    if prev_press == 0 and val == 1:
+        mode_index = (mode_index + 1) % len(modes)
+        state["theme"] = modes[mode_index]
+        time.sleep(0.05)  # debounce
+    prev_press = val
 
     # Send only changed values
     delta = {k: v for k, v in state.items() if last_sent.get(k) != v}
